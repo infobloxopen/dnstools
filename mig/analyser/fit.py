@@ -42,31 +42,15 @@ def calculate_fit(timestamps, start, params):
     return leastsq(linear_count_residuals, numpy.array(x0),
                    args=(numpy.array(timestamp_train), numpy.array(count_train)))[0]
 
-def rate_round(r):
-    i = 0
-    while r > 100:
-       r /= 10
-       i += 1
-
-    return int(round(r)*math.pow(10, i))
-
 def main():
     path = sys.argv[1]
-    low = int(sys.argv[2])
-    high = int(sys.argv[3])
-    test = int(sys.argv[4])
 
     sends, receives, pairs = jload(path)
-    rate = calculate_fit(sends, sends[0], [])[1]
+    send = calculate_fit(sends, sends[0], [])[1]
+    recv = calculate_fit(receives, sends[0], [])[1] if receives else 0
     lost = len(sends) - len(receives)
 
-    if high < 0:
-        high = rate
-
-    prev_rate = low if lost > 0 else high
-    next_rate = 0.5*(prev_rate + test)
-
-    print json.dumps({"rate": rate_round(rate), "lost": lost, "next": rate_round(next_rate)})
+    print json.dumps({"send": send, "recv": recv, "lost": lost})
     return 0
 
 if __name__ == '__main__':
