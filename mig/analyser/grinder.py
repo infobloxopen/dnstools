@@ -233,6 +233,10 @@ def make_processing(pairs, name, color):
 
     delays = sorted([pair[2] for pair in pairs if len(pair) > 2])
     if delays:
+	while delays and delays[0] <= 0:
+            delays = delays[1:]
+
+    if delays:
         left = math.floor(math.log10(delays[0]))
         right = math.ceil(math.log10(delays[-1]))
         step = (right - left)/__FITPOINTS
