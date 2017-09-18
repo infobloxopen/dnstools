@@ -28,6 +28,8 @@
 
 #define NANOSECONDS 1000000000
 
+#define RECV_TIMEOUT 35
+
 char additional[] = {'\x00', '\x00', '\x29', '\x10', '\x00', '\x00', '\x00', '\x80',
                      '\x00', '\x00', '\x14', '\xff', '\xee', '\x00', '\x10'};
 
@@ -196,7 +198,6 @@ int recv_answer(int fd, struct sockaddr_in *server, void *buffer, size_t size,
 			log_errno("Error on getting timestamp.");
 			return -1;
 		}
-		receives[*index] = received;
 
 		if (verbose) log_message("Got %ld bytes.", bytes_received);
 
@@ -233,32 +234,31 @@ int recv_answer(int fd, struct sockaddr_in *server, void *buffer, size_t size,
 			pair_index += USHRT_MAX;
 		}
 
-		if (pair_index >= count)
+		if (pair_index < count)
 		{
-			log_error("Received duplicate answer for query with transaction id %hu.",
-			          query->transaction_id);
-			return -1;
+			pair->answer++;
+			receives[*index] = received;
+			pair->received = receives[*index];
+
+			if (verbose) log_message("Answer:\n"
+			                         "\tID.........: %hu\n"
+			                         "\tFlags......: 0x%hx\n"
+			                         "\tQueries....: %hu\n"
+			                         "\tAnswers....: %hu\n"
+			                         "\tAuthorities: %hu\n"
+			                         "\tAdditional.: %hu\n\n",
+			                         query->transaction_id,
+			                         query->flags,
+			                         query->questions,
+			                         query->answers,
+			                         query->authorities,
+			                         query->additional);
+
+			(*index)++;
+			if (verbose) log_message("Remains messages: %lu.", count - *index);
 		}
-
-		pair->answer++;
-		pair->received = receives[*index];
-
-		if (verbose) log_message("Answer:\n"
-		                         "\tID.........: %hu\n"
-		                         "\tFlags......: 0x%hx\n"
-		                         "\tQueries....: %hu\n"
-		                         "\tAnswers....: %hu\n"
-		                         "\tAuthorities: %hu\n"
-		                         "\tAdditional.: %hu\n\n",
-		                         query->transaction_id,
-		                         query->flags,
-		                         query->questions,
-		                         query->answers,
-		                         query->authorities,
-		                         query->additional);
-
-		(*index)++;
-		if (verbose) log_message("Remains messages: %lu.", count - *index);
+		else if (verbose) log_error("Received duplicate answer for query with transaction id %hu.",
+		                            query->transaction_id);
 	}
 
 	return 0;
@@ -1055,7 +1055,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	size_t attempts = 10;
+	size_t attempts = RECV_TIMEOUT;
 	while (messages_received < count && attempts > 0)
 	{
 		struct timeval timeout = {1, 0};
@@ -1102,7 +1102,7 @@ int main(int argc, char *argv[])
 					return 1;
 				}
 
-				attempts = 10;
+				attempts = RECV_TIMEOUT;
 			}
 			else FD_SET(s, &readfds);
 		}
