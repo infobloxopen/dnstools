@@ -374,27 +374,39 @@ def main():
     output, title, details, inputs, from_point, to_point, no_fit, build_rates = get_arguments()
 
     inputs = list(enumerate_inputs(inputs))
+    scaled_speed = 0
     for i, name, speed in inputs:
         if speed is None:
             def speed_translation(item):
                 i, name, speed = item
                 return i, name, None
 
+            break
+
+        if speed >= 1000:
+            scaled_speed += 1
+
     else:
         inputs = sorted(inputs, key=lambda x: x[2])
 
-        def speed_translation(item):
-            i, name, speed = item
-            if speed % 1000 == 0:
-                speed = "%dk" % (speed/1000)
-            elif speed % 100 == 0:
-                speed = "%.1fk" % (speed/1000.)
-            elif speed % 10 == 0:
-                speed = "%.2fk" % (speed/1000.)
-            else:
-                speed = "%.3fk" % (speed/1000.)
+        if 3*scaled_speed < len(inputs):
+            def speed_translation(item):
+                i, name, speed = item
+                return i, name, "%s" % speed
 
-            return i, name, speed
+	else:
+            def speed_translation(item):
+                i, name, speed = item
+                if speed % 1000 == 0:
+                    speed = "%dk" % (speed/1000)
+                elif speed % 100 == 0:
+                    speed = "%.1fk" % (speed/1000.)
+                elif speed % 10 == 0:
+                    speed = "%.2fk" % (speed/1000.)
+                else:
+                    speed = "%.3fk" % (speed/1000.)
+
+                return i, name, speed
 
     inputs = map(speed_translation, inputs)
 
