@@ -374,27 +374,39 @@ def main():
     output, title, details, inputs, from_point, to_point, no_fit, build_rates = get_arguments()
 
     inputs = list(enumerate_inputs(inputs))
+    scaled_speed = 0
     for i, name, speed in inputs:
         if speed is None:
             def speed_translation(item):
                 i, name, speed = item
-                return i, name, None
+                return i, name, None, None
+
+            break
+
+        if speed >= 1000:
+            scaled_speed += 1
 
     else:
         inputs = sorted(inputs, key=lambda x: x[2])
 
-        def speed_translation(item):
-            i, name, speed = item
-            if speed % 1000 == 0:
-                speed = "%dk" % (speed/1000)
-            elif speed % 100 == 0:
-                speed = "%.1fk" % (speed/1000.)
-            elif speed % 10 == 0:
-                speed = "%.2fk" % (speed/1000.)
-            else:
-                speed = "%.3fk" % (speed/1000.)
+        if 3*scaled_speed < len(inputs):
+            def speed_translation(item):
+                i, name, speed = item
+                return i, name, "%s" % speed, speed
 
-            return i, name, speed
+	else:
+            def speed_translation(item):
+                i, name, speed = item
+                if speed % 1000 == 0:
+                    label = "%dk" % (speed/1000)
+                elif speed % 100 == 0:
+                    label = "%.1fk" % (speed/1000.)
+                elif speed % 10 == 0:
+                    label = "%.2fk" % (speed/1000.)
+                else:
+                    label = "%.3fk" % (speed/1000.)
+
+                return i, name, label, speed
 
     inputs = map(speed_translation, inputs)
 
@@ -404,8 +416,10 @@ def main():
     queue = []
     reference_series = {"values": [], "key": "Reference", "color": "#c0c0c0"}
     receiving_series = {"values": [], "key": title, "color": "#000000"}
+    sending_labels_series = {"values": [], "key": "Sending", "color": "#c0c0c0"}
+    receiving_labels_series = {"values": [], "key": "Receiving", "color": "#000000"}
 
-    for i, name, speed in inputs:
+    for i, name, label, speed in inputs:
         sends, receives, pairs, fits = jload(name)
         if no_fit:
             fits = {__SENDS_MARK: [], __RECEIVES_MARK: []}
@@ -430,7 +444,7 @@ def main():
         send_color = __COLORS[2*i % len(__COLORS)]
         receive_color = __COLORS[(2*i + 1) % len(__COLORS)]
 
-        additional = (details[i] if i < len(details) else "") or speed
+        additional = (details[i] if i < len(details) else "") or label
         if additional:
             additional = " (%s)" % additional
 
@@ -452,7 +466,7 @@ def main():
 
         if sending_rate is None and build_rates:
             sending_rate = calculate_fit(sends, start, [])[1]
-            print "%s: %s" % ((details[i] if i < len(details) else "") or speed, sending_rate)
+            print "%s: %s" % ((details[i] if i < len(details) else "") or label, sending_rate)
 
         receiving_rate = None
         for fit in fits[__RECEIVES_MARK]:
@@ -472,9 +486,15 @@ def main():
         if build_rates and sending_rate is not None:
             reference_series["values"].append({"x": sending_rate, "y": sending_rate})
 
+            if speed is not None:
+                sending_labels_series["values"].append({"x": speed, "y": sending_rate})
+
             if receiving_rate is not None:
                 receiving_series["values"].append({"x": sending_rate, "y": receiving_rate})
-                print "%s: %s" % ((details[i] if i < len(details) else "") or speed, receiving_rate)
+                print "%s: %s" % ((details[i] if i < len(details) else "") or label, receiving_rate)
+
+                if speed is not None:
+                    receiving_labels_series["values"].append({"x": speed, "y": receiving_rate})
 
         counts.append(make_count(sends, "Sent%s" % additional, start, fits_sent_count, send_color))
         counts += fits_sent_count
@@ -496,6 +516,15 @@ def main():
 
     charts = []
     if build_rates:
+        if sending_labels_series["values"] or receiving_labels_series["values"]:
+            if sending_labels_series["values"]:
+                sending_labels_series["values"] = sorted(sending_labels_series["values"], key=lambda x: x["x"])
+
+            if receiving_labels_series["values"]:
+                receiving_labels_series["values"] = sorted(receiving_labels_series["values"], key=lambda x: x["x"])
+
+            charts.append(__HTML_RUN_CHART % (json.dumps(sending_labels_series), json.dumps(receiving_labels_series)))
+
         reference_series["values"] = sorted(reference_series["values"], key=lambda x: x["x"])
         receiving_series["values"] = sorted(receiving_series["values"], key=lambda x: x["x"])
         charts.append(__HTML_RATE_CHART % (json.dumps(reference_series), json.dumps(receiving_series)))
@@ -545,6 +574,76 @@ __HTML = r'''<!DOCTYPE HTML>
     %(charts)s
   </body>
 </html>'''
+
+__HTML_RUN_CHART = r'''<div style="font-family:arial; font-size:75%%; min-width: 310px; margin: 0 auto">
+      <h1 style="center">Rate by Run</h1>
+    </div>
+    <svg id="run" style="min-width: 310px; height: 700px; margin: 0 auto"></svg>
+    <div style="font-family:arial; font-size:75%%; min-width: 310px; margin: 0 auto">
+      Run&nbsp;<sub>min</sub>:&nbsp;<input id="runXMin"/>;
+      Run&nbsp;<sub>max</sub>:&nbsp;<input id="runXMax"/>;
+      Rate&nbsp;<sub>min</sub>:&nbsp;<input id="runYMin"/>;
+      Rate&nbsp;<sub>max</sub>:&nbsp;<input id="runYMax"/>;
+      <button onclick="applyRunDomains()">Apply</button>
+      <button onclick="resetRunDomains()">Reset</button>
+    </div>
+    <script>
+      var runData = [%s, %s]
+
+      var runChart
+      var runXMin = document.getElementById("runXMin"),
+          runXMax = document.getElementById("runXMax"),
+          runYMin = document.getElementById("runYMin"),
+          runYMax = document.getElementById("runYMax")
+
+      var applyRunDomains = function() {
+        runChart.xDomain([runXMin.value, runXMax.value])
+        runChart.yDomain([runYMin.value, runYMax.value])
+        runChart.update()
+      }
+
+      var resetRunDomains = function() {
+        runChart.xDomain(null)
+        runChart.yDomain(null)
+        runChart.update()
+      }
+
+      nv.addGraph({
+        generate: function() {
+          var svg = d3.select('#run')
+          runChart = nv.models.lineChart()
+          runChart
+            .width(svg.attr('width'))
+            .dispatch.on('renderEnd', function(){
+              var xDomain = runChart.xAxis.domain(),
+                  yDomain = runChart.yAxis.domain()
+              runXMin.value = xDomain[0]
+              runXMax.value = xDomain[1]
+              runYMin.value = yDomain[0]
+              runYMax.value = yDomain[1]
+            })
+
+          runChart.xAxis
+            .axisLabel("Run")
+            .showMaxMin(false)
+
+          runChart.yAxis
+            .axisLabel("Rate, QpS")
+            .showMaxMin(false)
+
+          svg.datum(runData).call(runChart)
+
+          return runChart
+        },
+        callback: function(graph) {
+            window.onresize = function() {
+                var svg = d3.select('#run')
+                graph.width(svg.attr('width'))
+                svg.call(graph)
+            };
+        }
+      })
+    </script>'''
 
 __HTML_RATE_CHART = r'''<div style="font-family:arial; font-size:75%%; min-width: 310px; margin: 0 auto">
       <h1 style="center">Receiving vs Sending</h1>
