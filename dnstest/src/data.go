@@ -16,6 +16,7 @@ type dnstest struct {
 	tlsConfig  *tls.Config
 	conns      chan *dns.Conn
 	uncached   bool
+	timeout    int
 	totalCount int64
 	totalRTT   int64
 }
@@ -27,6 +28,7 @@ func newTest(cfg *config) *dnstest {
 		start:    time.Now(),
 		conns:    make(chan *dns.Conn, cfg.clients),
 		uncached: cfg.uncached,
+		timeout:  cfg.timeout,
 	}
 
 	if cfg.mode == "tls" {
@@ -60,25 +62,26 @@ func (dt *dnstest) connect() *dns.Conn {
 	return conn
 }
 
-func (dt *dnstest) exchange(conn *dns.Conn, hdr *dns.Header) error {
+func (dt *dnstest) exchange(conn *dns.Conn, hdr *dns.Header) (*dns.Msg, error) {
 	seed := atomic.AddInt64(&dt.totalCount, 1)
 	msg := getMsg(seed, dt.uncached)
 	reqTime := time.Now()
 	if err := conn.WriteMsg(msg); err != nil {
-		return err
+		return msg, err
 	}
+	conn.SetReadDeadline(time.Now().Add(time.Duration(dt.timeout) * time.Second))
 	if _, err := conn.ReadMsgHeader(hdr); err != nil {
-		return err
+		return msg, err
 	}
 	if hdr.Id != msg.Id {
-		return dns.ErrId
+		return msg, dns.ErrId
 	}
-	if rcode := hdr.Bits & 15; rcode != dns.RcodeSuccess && rcode != dns.RcodeNameError {
-		return fmt.Errorf("bad rcode: %d", rcode)
+	if rcode := int(hdr.Bits & 15); rcode != dns.RcodeSuccess && rcode != dns.RcodeNameError {
+		return msg, fmt.Errorf("bad rcode: %s", dns.RcodeToString[rcode])
 	}
 	rtt := int64(time.Since(reqTime))
 	atomic.AddInt64(&dt.totalRTT, rtt)
-	return nil
+	return msg, nil
 }
 
 func (dt *dnstest) worker() {
@@ -87,9 +90,9 @@ func (dt *dnstest) worker() {
 		if conn == nil {
 			conn = dt.connect()
 		}
-		if err := dt.exchange(conn, hdr); err != nil {
+		if msg, err := dt.exchange(conn, hdr); err != nil {
 			conn.Close()
-			fmt.Printf("Reconnect due %s\n", err)
+			fmt.Printf("Reconnect for [%s] due %s\n", msg.Question[0].Name, err)
 			conn = nil
 		}
 		dt.conns <- conn

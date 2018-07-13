@@ -14,7 +14,7 @@ func main() {
 		go test.worker()
 	}
 
-	<-time.After(time.Duration(cfg.timeout) * time.Second)
+	<-time.After(time.Duration(cfg.limit) * time.Second)
 
 	qps, rtt := test.stats()
 	fmt.Printf("QPS: %d, RTT (sec): %f\n", qps, rtt)
