@@ -96,7 +96,7 @@ int make_answer(void *query, size_t query_size, void *answer, size_t *answer_siz
 	struct dns_query *header = (struct dns_query *) query;
 
 	unsigned short flags = header->flags;
-	if (flags & ~0x1)
+	if (flags & 0x1f00)
 	{
 		make_refused_answer(query, query_size, answer, answer_size);
 		return 0;
