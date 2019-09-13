@@ -14,6 +14,7 @@ type config struct {
 	limit    int
 	uncached bool
 	timeout  int
+	filepath string
 }
 
 func loadConfig() *config {
@@ -27,6 +28,7 @@ func loadConfig() *config {
 	flag.IntVar(&cfg.limit, "l", 10, "Time limit (seconds)")
 	flag.BoolVar(&cfg.uncached, "u", false, "Use uncached queries")
 	flag.IntVar(&cfg.timeout, "t", 5, "Read timeout (seconds)")
+	flag.StringVar(&cfg.filepath, "f", "", "Data filename (use predefined list if empty)")
 
 	flag.Parse()
 

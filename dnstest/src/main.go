@@ -8,6 +8,10 @@ import (
 func main() {
 	cfg := loadConfig()
 
+	if err := loadData(cfg.filepath); err != nil {
+		panic(fmt.Errorf("Load data failed: %s", err))
+	}
+
 	test := newTest(cfg)
 
 	for w := 0; w < cfg.workers; w++ {
