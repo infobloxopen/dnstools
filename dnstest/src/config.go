@@ -15,6 +15,7 @@ type config struct {
 	uncached bool
 	timeout  int
 	filepath string
+	ecs      bool
 }
 
 func loadConfig() *config {
@@ -29,6 +30,7 @@ func loadConfig() *config {
 	flag.BoolVar(&cfg.uncached, "u", false, "Use uncached queries")
 	flag.IntVar(&cfg.timeout, "t", 5, "Read timeout (seconds)")
 	flag.StringVar(&cfg.filepath, "f", "", "Data filename (use predefined list if empty)")
+	flag.BoolVar(&cfg.ecs, "e", false, "Insert random ECS to queries")
 
 	flag.Parse()
 

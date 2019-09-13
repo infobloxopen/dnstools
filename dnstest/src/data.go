@@ -16,6 +16,7 @@ type dnstest struct {
 	tlsConfig  *tls.Config
 	conns      chan *dns.Conn
 	uncached   bool
+	ecs        bool
 	timeout    int
 	totalCount int64
 	totalRTT   int64
@@ -29,6 +30,7 @@ func newTest(cfg *config) *dnstest {
 		conns:    make(chan *dns.Conn, cfg.clients),
 		uncached: cfg.uncached,
 		timeout:  cfg.timeout,
+		ecs:      cfg.ecs,
 	}
 
 	if cfg.mode == "tls" {
@@ -64,7 +66,7 @@ func (dt *dnstest) connect() *dns.Conn {
 
 func (dt *dnstest) exchange(conn *dns.Conn, hdr *dns.Header) (*dns.Msg, error) {
 	seed := atomic.AddInt64(&dt.totalCount, 1)
-	msg := getMsg(seed, dt.uncached)
+	msg := getMsg(seed, dt.uncached, dt.ecs)
 	reqTime := time.Now()
 	if err := conn.WriteMsg(msg); err != nil {
 		return msg, err

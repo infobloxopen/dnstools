@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"math/rand"
 	"os"
 	"strconv"
 
@@ -43,7 +44,14 @@ func loadData(filepath string) error {
 	return nil
 }
 
-func getMsg(seed int64, uncached bool) *dns.Msg {
+func randIP() []byte {
+	o1 := byte(rand.Intn(254) + 1)
+	o2 := byte(rand.Intn(254) + 1)
+	o3 := byte(rand.Intn(254) + 1)
+	return []byte{o1, o2, o3, 0}
+}
+
+func getMsg(seed int64, uncached, ecs bool) *dns.Msg {
 	i := seed % int64(len(domains))
 	domain := domains[i]
 	if uncached {
@@ -51,5 +59,20 @@ func getMsg(seed int64, uncached bool) *dns.Msg {
 	}
 	msg := new(dns.Msg)
 	msg.SetQuestion(domain, dns.TypeA)
+	if !ecs {
+		return msg
+	}
+	msg.Extra = []dns.RR{
+		&dns.OPT{
+			Hdr: dns.RR_Header{Name: ".", Rrtype: dns.TypeOPT, Class: 4096},
+			Option: []dns.EDNS0{
+				&dns.EDNS0_SUBNET{
+					Code:          dns.EDNS0SUBNET,
+					SourceNetmask: 24,
+					Family:        1, // ipv4
+					Address:       randIP(),
+				}},
+		},
+	}
 	return msg
 }
