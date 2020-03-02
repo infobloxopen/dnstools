@@ -5,9 +5,8 @@ default: build
 
 .PHONY: vendor
 vendor:
-	GO111MODULE=on go mod vendor
+	GO111MODULE=on GOPROXY=direct GOSUMDB=off go mod vendor
 
+.PHONY: build
 build:
 	GO111MODULE=off CGO_ENABLED=0 go build -i -v -ldflags '-w -s' -o $(SRCROOT)/build/dnstest $(SRC)
-
-.PHONY: vendor build

@@ -44,8 +44,14 @@ youtube.com
 -s string
 > Server endpoint (addr:port - default "127.0.0.1:53")
 
--t int
+-rt int
 > Read timeout (seconds - default 5)
+
+-dt int
+> Dial timeout (seconds - default 2)
+
+-mt int
+> Max dial timeout (seconds - default 10)
 
 -u bool
 > Use uncached queries, random prefix (like 12345.google.com) is added for each domain in the list to avoid caching
