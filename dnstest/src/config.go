@@ -6,16 +6,18 @@ import (
 )
 
 type config struct {
-	mode     string
-	server   string
-	caPath   string
-	clients  int
-	workers  int
-	limit    int
-	uncached bool
-	timeout  int
-	filepath string
-	ecs      bool
+	mode           string
+	server         string
+	caPath         string
+	clients        int
+	workers        int
+	limit          int
+	uncached       bool
+	readTimeout    int
+	dialTimeout    int
+	maxDialTimeout int
+	filepath       string
+	ecs            bool
 }
 
 func loadConfig() *config {
@@ -28,7 +30,9 @@ func loadConfig() *config {
 	flag.IntVar(&cfg.workers, "w", 100, "Number of workers")
 	flag.IntVar(&cfg.limit, "l", 10, "Time limit (seconds)")
 	flag.BoolVar(&cfg.uncached, "u", false, "Use uncached queries")
-	flag.IntVar(&cfg.timeout, "t", 5, "Read timeout (seconds)")
+	flag.IntVar(&cfg.readTimeout, "rt", 5, "Read timeout (seconds)")
+	flag.IntVar(&cfg.dialTimeout, "dt", 2, "Dial timeout (seconds)")
+	flag.IntVar(&cfg.maxDialTimeout, "mt", 10, "Max dial timeout (seconds)")
 	flag.StringVar(&cfg.filepath, "f", "", "Data filename (use predefined list if empty)")
 	flag.BoolVar(&cfg.ecs, "e", false, "Insert random ECS to queries")
 

@@ -10,27 +10,31 @@ import (
 )
 
 type dnstest struct {
-	mode       string
-	server     string
-	start      time.Time
-	tlsConfig  *tls.Config
-	conns      chan *dns.Conn
-	uncached   bool
-	ecs        bool
-	timeout    int
-	totalCount int64
-	totalRTT   int64
+	mode           string
+	server         string
+	start          time.Time
+	tlsConfig      *tls.Config
+	conns          chan *dns.Conn
+	uncached       bool
+	ecs            bool
+	readTimeout    time.Duration
+	dialTimeout    time.Duration
+	maxDialTimeout time.Duration
+	totalCount     int64
+	totalRTT       int64
 }
 
 func newTest(cfg *config) *dnstest {
 	ret := &dnstest{
-		mode:     cfg.mode,
-		server:   cfg.server,
-		start:    time.Now(),
-		conns:    make(chan *dns.Conn, cfg.clients),
-		uncached: cfg.uncached,
-		timeout:  cfg.timeout,
-		ecs:      cfg.ecs,
+		mode:           cfg.mode,
+		server:         cfg.server,
+		start:          time.Now(),
+		conns:          make(chan *dns.Conn, cfg.clients),
+		uncached:       cfg.uncached,
+		readTimeout:    time.Duration(cfg.readTimeout) * time.Second,
+		dialTimeout:    time.Duration(cfg.dialTimeout) * time.Second,
+		maxDialTimeout: time.Duration(cfg.maxDialTimeout) * time.Second,
+		ecs:            cfg.ecs,
 	}
 
 	if cfg.mode == "tls" {
@@ -53,14 +57,22 @@ func (dt *dnstest) connect() *dns.Conn {
 		conn *dns.Conn
 		err  error
 	)
+	t := time.Now()
 	if dt.tlsConfig != nil {
-		conn, err = dns.DialWithTLS("tcp", dt.server, dt.tlsConfig)
+		conn, err = dns.DialTimeoutWithTLS("tcp", dt.server, dt.tlsConfig, dt.maxDialTimeout)
 	} else {
-		conn, err = dns.Dial(dt.mode, dt.server)
+		conn, err = dns.DialTimeout(dt.mode, dt.server, dt.maxDialTimeout)
 	}
+	since := time.Since(t)
+	if since > dt.dialTimeout {
+		fmt.Printf("Dial warning - delay: %s\n", since)
+	}
+
 	if err != nil {
-		panic(fmt.Errorf("Connect failed: %s", err))
+		fmt.Printf("Dial error: %s\n", err)
+		return nil
 	}
+
 	return conn
 }
 
@@ -71,7 +83,7 @@ func (dt *dnstest) exchange(conn *dns.Conn, hdr *dns.Header) (*dns.Msg, error) {
 	if err := conn.WriteMsg(msg); err != nil {
 		return msg, err
 	}
-	conn.SetReadDeadline(time.Now().Add(time.Duration(dt.timeout) * time.Second))
+	conn.SetReadDeadline(time.Now().Add(dt.readTimeout))
 	if _, err := conn.ReadMsgHeader(hdr); err != nil {
 		return msg, err
 	}
@@ -91,6 +103,11 @@ func (dt *dnstest) worker() {
 	for conn := range dt.conns {
 		if conn == nil {
 			conn = dt.connect()
+			if conn == nil {
+				fmt.Printf("Reconnect due connection was broken\n")
+				dt.conns <- nil
+				continue
+			}
 		}
 		if msg, err := dt.exchange(conn, hdr); err != nil {
 			conn.Close()
