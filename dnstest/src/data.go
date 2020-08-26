@@ -76,30 +76,33 @@ func (dt *dnstest) connect() *dns.Conn {
 	return conn
 }
 
-func (dt *dnstest) exchange(conn *dns.Conn, hdr *dns.Header) (*dns.Msg, error) {
+func (dt *dnstest) req() *dns.Msg {
 	seed := atomic.AddInt64(&dt.totalCount, 1)
-	msg := getMsg(seed, dt.uncached, dt.ecs)
+	return getMsg(seed, dt.uncached, dt.ecs)
+}
+
+func (dt *dnstest) exchange(conn *dns.Conn, req *dns.Msg) error {
 	reqTime := time.Now()
-	if err := conn.WriteMsg(msg); err != nil {
-		return msg, err
+	if err := conn.WriteMsg(req); err != nil {
+		return err
 	}
 	conn.SetReadDeadline(time.Now().Add(dt.readTimeout))
-	if _, err := conn.ReadMsgHeader(hdr); err != nil {
-		return msg, err
+	resp, err := conn.ReadMsg()
+	if err != nil {
+		return err
 	}
-	if hdr.Id != msg.Id {
-		return msg, dns.ErrId
+	if resp.Id != req.Id {
+		return dns.ErrId
 	}
-	if rcode := int(hdr.Bits & 15); rcode != dns.RcodeSuccess && rcode != dns.RcodeNameError {
-		return msg, fmt.Errorf("bad rcode: %s", dns.RcodeToString[rcode])
+	if resp.Rcode != dns.RcodeSuccess && resp.Rcode != dns.RcodeNameError {
+		return fmt.Errorf("bad rcode: %s", dns.RcodeToString[resp.Rcode])
 	}
 	rtt := int64(time.Since(reqTime))
 	atomic.AddInt64(&dt.totalRTT, rtt)
-	return msg, nil
+	return nil
 }
 
 func (dt *dnstest) worker() {
-	hdr := new(dns.Header)
 	for conn := range dt.conns {
 		if conn == nil {
 			conn = dt.connect()
@@ -109,9 +112,10 @@ func (dt *dnstest) worker() {
 				continue
 			}
 		}
-		if msg, err := dt.exchange(conn, hdr); err != nil {
+		req := dt.req()
+		if err := dt.exchange(conn, req); err != nil {
 			conn.Close()
-			fmt.Printf("Reconnect for [%s] due %s\n", msg.Question[0].Name, err)
+			fmt.Printf("Reconnect for [%s] due %s\n", req.Question[0].Name, err)
 			conn = nil
 		}
 		dt.conns <- conn
